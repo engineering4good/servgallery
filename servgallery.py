@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+# -*- coding: utf-8 -*-
 """
 servGallery is a super simple image gallery server.
 
