@@ -12,6 +12,11 @@ to do the same for any directory programmatically.
 Inspired by imageme (https://github.com/unwitting/imageme).
 """
 
+import sys
+if sys.version_info.major < 3:
+    print("Use Python 3. Python 2 is deprecated.")
+    exit()
+
 # Dependencies
 import argparse
 import html
@@ -20,7 +25,6 @@ import json
 import math
 import os
 import socketserver
-import sys
 import tempfile
 import urllib
 from enum import Enum
@@ -758,10 +762,6 @@ def run_server(port, dir_path):
 
     @return {None}
     """
-    if sys.version_info.major < 3:
-        print("Use Python 3. Python 2 is deprecated.")
-        return
-
     if sys.version_info.major == 3 and sys.version_info.minor < 7:
         os.chdir(dir_path)
         request_handler = RequestHandler

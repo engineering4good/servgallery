@@ -2,11 +2,11 @@
 servGallery is a simple server for gallery preview on local network.
 It's like `python -m http.server`, but photo centered.
 
-![sceenshot](../gh-pages/sceenshot.png "servGallery sceenshot")
+![sceenshot](screenshot.png "servGallery sceenshot")
 ## Run server
 Share _'Photos/'_ directory on  _8080_ port
 ```bash
-curl https://raw.githubusercontent.com/engineering4good/servgallery/master/servgallery.py | python - --directory=Photos/ 8080
+curl https://raw.githubusercontent.com/engineering4good/servgallery/master/servgallery.py | python3 - --directory=Photos/ 8080
 ```
 ## Use as library
 servGallery can be imported from your Python code:
