@@ -758,6 +758,16 @@ def run_server(port, dir_path):
 
     @return {None}
     """
+    if sys.version_info.major < 3:
+        print("Use Python 3. Python 2 is deprecated.")
+        return
+
+    if sys.version_info.major == 3 and sys.version_info.minor < 7:
+        os.chdir(dir_path)
+        request_handler = RequestHandler
+    else:
+        request_handler = partial(RequestHandler, directory=dir_path)
+
     # Configure allow_reuse_address to make re-runs of the script less painful -
     # if this is not True then waiting for the address to be freed after the
     # last run can block a subsequent run
@@ -765,7 +775,7 @@ def run_server(port, dir_path):
     # Create the server instance
     server = socketserver.ThreadingTCPServer(
         ('', port),
-        partial(RequestHandler, directory=dir_path)
+        request_handler
     )
 
     print('Your images are at http://127.0.0.1:%d/' % port)
