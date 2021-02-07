@@ -4,13 +4,12 @@ It's like `python -m http.server`, but photo centered.
 
 ![screenshot](screenshot.png "servGallery screenshot")
 ## Run server
-####Example: share current directory
+#### Example: share current directory
 ```bash
 curl https://raw.githubusercontent.com/engineering4good/servgallery/master/servgallery.py | python3 -
 ```
 
-####Example: share _'./'_ directory on  _8080_ port.
-
+#### Example: share _'./'_ directory on  _8080_ port.
 Single line:
 ```bash
 curl https://raw.githubusercontent.com/engineering4good/servgallery/master/servgallery.py | python3 - --directory="./" 8080
@@ -23,7 +22,7 @@ and run
 ```bash
 python3 servgallery/servgallery.py --directory="./" 8080
 ```
-###Usage
+## Usage
 servgallery.py [-h] [--directory DIRECTORY] [port]
 - port: server port number [default: 8000]
 - directory: shared directory path [default:current directory]
