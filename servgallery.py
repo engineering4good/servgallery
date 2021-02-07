@@ -798,12 +798,12 @@ def run_server(port, dir_path):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run server with media preview from directory.')
     parser.add_argument('--directory', '-d', default=os.getcwd(),
-                        help='Specify alternative directory '
-                             '[default:current directory]')
+                        help='shared directory path '
+                             '[default: current directory]')
     parser.add_argument('port', action='store',
                         default=8000, type=int,
                         nargs='?',
-                        help='Specify alternate port [default: 8000]')
+                        help='server port number [default: 8000]')
     args = parser.parse_args()
 
     run_server(args.port, os.path.expanduser(args.directory))
