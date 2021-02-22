@@ -384,6 +384,10 @@ class RequestHandler(SimpleHTTPRequestHandler):
             '   let li = document.createElement("li");' \
             '   li.classList.add("thumbnail");' \
             '   li.appendChild(link);' \
+            '   let description_div = document.createElement("div");' \
+            '   description_div.classList.add("thumbnail_description");' \
+            '   description_div.innerText = filename;' \
+            '   li.appendChild(description_div);' \
             '   document.getElementById("media_list").appendChild(li);' \
             '};' \
             'function loadMediaUncomment() {' \
@@ -584,30 +588,38 @@ class RequestHandler(SimpleHTTPRequestHandler):
             '.thumbnail {' \
             '   display: inline-block;' \
             '   vertical-align: top;' \
+            '   background-color: ghostwhite;' \
+            '   border-radius: 0.5em;' \
+            '   margin: 1vh;' \
             '}' \
             '.thumbnail > a {' \
             '   display: flex;' \
             '   height: 300px;' \
-            '   margin: 1vh;' \
+            '}' \
+            '.thumbnail > .thumbnail_description {' \
+            '   font-size: 3vh;' \
+            '}' \
+            '.preview_thumbnail > .thumbnail_description {' \
+            '   font-size: 5vh;' \
             '}' \
             '.preview_thumbnail {' \
-            '   width: 100%;' \
+            '   width: 94vw;' \
             '}' \
             '.preview_thumbnail > a {' \
-            '   height: 98vh;' \
+            '   height: 92vh;' \
             '}' \
             '.thumbnail_ui_el {' \
             '   border-radius: 0.5em;' \
             '   height: 100%;' \
             '   width: 100%;' \
             '   object-fit: contain;' \
-            '   background-color: ghostwhite;' \
             '}' \
             '#current_counter {' \
             '   position: fixed;' \
             '   bottom: 0px;' \
             '   right: 0px;' \
             '   background-color: white;' \
+            '   padding: 5px;' \
             '}'
 
         r.append('<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" '

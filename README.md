@@ -28,7 +28,7 @@ servgallery.py [-h] [--directory DIRECTORY] [port]
 - directory: shared directory path [default:current directory]
 
 ## Use as library
-servGallery can be imported from your Python code:
+servGallery can be imported from your Python 3 code:
 ```python
 from servgallery import run_server
 
