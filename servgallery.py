@@ -188,6 +188,9 @@ def _get_preview(path, min_height, frame_ind=0):
 
 class RequestHandler(SimpleHTTPRequestHandler):
     def rest_api(self, method, api_args=None):
+        enc = 'utf-8'
+        result = None
+        status = HTTPStatus.NOT_FOUND
         if method == 'list_directory':
             path = self.translate_path(api_args.get('dir', os.path.curdir))
             only_files = 'only_files' in api_args and api_args['only_files'] == "yes"
@@ -196,15 +199,19 @@ class RequestHandler(SimpleHTTPRequestHandler):
                     dir_list = sorted(os.listdir(path))
                     if only_files:
                         dir_list = [name for name in dir_list if os.path.isfile(os.path.join(path, name))]
-                    f = io.BytesIO(json.dumps(dir_list).encode('utf-8'))
-                    return f
+                    result = io.BytesIO(json.dumps(dir_list).encode('utf-8'))
+                    status = HTTPStatus.OK
                 except OSError:
                     pass
         elif method == 'count_frames':
             path = self.translate_path(api_args.get('image', os.path.curdir))
             if _is_media_file(path, MediaTypes.IMAGE):
-                f = io.BytesIO(json.dumps(_get_n_frames(path)).encode('utf-8'))
-                return f
+                result = io.BytesIO(json.dumps(_get_n_frames(path)).encode('utf-8'))
+                status = HTTPStatus.OK
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=%s" % enc)
+        self.end_headers()
+        return result
 
     def list_directory(self, path):
         """Helper to produce a directory listing (absent index.html).
@@ -419,6 +426,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
             '    init();' \
             '};' \
             'window.onkeydown = function(event) {' \
+            '    console.log(event);' \
             '    switch(event.keyCode) {' \
             '        case 39:' \
             '            if (!event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {' \
@@ -442,15 +450,14 @@ class RequestHandler(SimpleHTTPRequestHandler):
             '            toggleHelp();' \
             '            break;' \
             '        case 13:' \
-            '            let hovered = document.querySelectorAll(".thumbnail:hover");' \
-            '            if (hovered.length > 0) {' \
-            '                event.stopPropagation();' \
-            '                event.preventDefault();' \
-            '                preview(hovered[0]);' \
+            '            let hovered = document.querySelectorAll(".thumbnail:hover").item(0);' \
+            '            if (hovered != null) {' \
+            '                let link = hovered.getElementsByTagName("a").item(0);' \
+            '                if (link != null) {' \
+            '                    link.focus();' \
+            '                }' \
             '            }' \
             '            break;' \
-            '        default:' \
-            '             console.log(event); /**/' \
             '    }' \
             '};' \
             'function previewNext() {' \
@@ -487,6 +494,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
             '    document.activeElement.blur();' \
             '    thumbnail.classList.add("preview_thumbnail");' \
             '    thumbnail.scrollIntoView();' \
+            '    thumbnail.getElementsByTagName("a")[0].focus();' \
             '    window.selected_thumbnail = thumbnail;' \
             '    updateCurrentCounter();' \
             '    let thumbnail_ui_list = thumbnail.getElementsByClassName("thumbnail_ui_el");' \
@@ -512,7 +520,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
             '        link.click();' \
             '    }' \
             '};' \
-            'function handleThumbnailClick(event) {' \
+            'function handleMediaListClick(event) {' \
             '    if (!event.ctrlKey) {' \
             '        event.stopPropagation();' \
             '        event.preventDefault();' \
@@ -595,6 +603,12 @@ class RequestHandler(SimpleHTTPRequestHandler):
             '.thumbnail > a {' \
             '   display: flex;' \
             '   height: 300px;' \
+            '   margin: 4px;' \
+            '}' \
+            '.thumbnail:hover > a {' \
+            '   border: 4px dotted gray;' \
+            '   border-radius: 0.5em;' \
+            '   margin: 0em;' \
             '}' \
             '.thumbnail > .thumbnail_description {' \
             '   font-size: 3vh;' \
@@ -611,7 +625,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
             '.thumbnail_ui_el {' \
             '   border-radius: 0.5em;' \
             '   height: 100%;' \
-            '   width: 100%;' \
+            '   max-width: 100%;' \
             '   object-fit: contain;' \
             '}' \
             '#current_counter {' \
@@ -705,7 +719,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
 
         r.append('<div id="non_media_list"></div>\n')
 
-        r.append('<div onclick="handleThumbnailClick(event)"><ul id="media_list"></ul></div>\n')
+        r.append('<div onclick="handleMediaListClick(event)"><ul id="media_list"></ul></div>\n')
 
         r.append('<p id="current_counter"></p>')
         r.append('</body>\n</html>\n')
@@ -714,7 +728,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
         f.write(encoded)
         f.seek(0)
         self.send_response(HTTPStatus.OK)
-        self.send_header("Content-media_type", "text/html; charset=%s" % enc)
+        self.send_header("Content-Type", "text/html; charset=%s" % enc)
         self.send_header("Content-Length", str(len(encoded)))
         self.end_headers()
         return f
@@ -742,7 +756,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
             f = _get_preview(path, min_height, frame_ind)
             if f is not None:
                 self.send_response(HTTPStatus.OK)
-                self.send_header("Content-media_type", "image")
+                self.send_header("Content-Type", "image")
                 self.end_headers()
                 return f
             else:
