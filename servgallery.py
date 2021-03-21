@@ -37,10 +37,14 @@ from urllib.parse import urlparse
 
 import numpy as np
 
+META_API = None
+
 IMREAD_ENABLED = False
-IMREAD_NOT_ENABLED_MSG = 'WARNING: \'imread\' module not found, so you won\'t get all the ' \
-                         'performance you could out of servGallery. Install imread (' \
-                         'https://github.com/luispedro/imread) to enable support.'
+IMREAD_NOT_ENABLED_MSG = '''\
+WARNING: 'imread' module not found, so you won't get all the \
+performance you could out of servGallery. Install imread (\
+https://github.com/luispedro/imread) to enable support.'''
+
 try:
     import imread
     IMREAD_ENABLED = True
@@ -118,6 +122,490 @@ MEDIA_EXTENSIONS = {
 
 PREPROCESSED_MEDIA_TYPES = ['tiff', 'tif']
 
+GALLERY_CSS = '''
+    #help_icon {
+       position: fixed;
+       right: 1em;
+       top: 1em;
+    }
+    .hidden {
+       display: none;
+    }
+    #help_display {
+       position: fixed;
+       width: 100%;
+       height: 100%;
+       background: #9999;
+       top: 0px;
+       left: 0px;
+       z-index: 1;
+    }
+    #help_display > div {
+       display: table;
+       margin: 5em auto;
+       background: whitesmoke;
+       padding: 1em;
+       line-height: 2;
+    }
+    .shortcut {
+       display: flex;
+       align-items: flex-start;
+    }
+    .shortcut_descr {
+       padding-right: 30px;
+    }
+    .shortcut_key {
+       align-items: center;
+       justify-content: center;
+       height: 34px;
+       min-width: 34px;
+       box-sizing: border-box;
+       padding-left: 12px;
+       padding-right: 12px;
+       border: 1px solid #e0e3eb;
+       box-shadow: 0 2px 0 #e0e3eb;
+       border-radius: 6px;
+       color: #131722;
+       margin-left: auto;
+    }
+    .dir {
+       list-style-media_type: none;
+       display: inline-block;
+       margin: 15px;
+    }
+    #non_media_list {
+       padding-left: 40px;
+    }
+    #media_list {
+       text-align:center;
+    }
+    .thumbnail {
+       display: inline-block;
+       vertical-align: top;
+       background-color: ghostwhite;
+       border-radius: 0.5em;
+       margin: 1vh;
+    }
+    .thumbnail > a {
+       display: flex;
+       height: 300px;
+       margin: 4px;
+    }
+    .thumbnail:hover > a {
+       border: 4px dotted gray;
+       border-radius: 0.5em;
+       margin: 0em;
+    }
+    .thumbnail > .thumbnail_description {
+       font-size: 3vh;
+    }
+    .preview_thumbnail > .thumbnail_description {
+       font-size: 5vh;
+    }
+    .preview_thumbnail {
+       width: 94vw;
+    }
+    .preview_thumbnail > a {
+       height: 92vh;
+    }
+    .thumbnail_ui_el {
+       border-radius: 0.5em;
+       height: 100%;
+       max-width: 100%;
+       object-fit: contain;
+    }
+    #current_counter {
+       position: fixed;
+       bottom: 0px;
+       right: 0px;
+       background-color: white;
+       padding: 5px;
+    '''
+
+GALLERY_JS_GLOBAL_VARS = 'var MEDIA_EXTENSIONS = {};'\
+    .format(str({ext: MEDIA_EXTENSIONS[ext].name for ext in MEDIA_EXTENSIONS}))
+
+GALLERY_JS_SCRIPT = \
+    GALLERY_JS_GLOBAL_VARS + \
+    '''
+    function getExtension(filename) {
+       let parts = filename.toLowerCase().split(".");
+       parts = parts.reverse();
+       return parts[0];
+    };
+    function toggleHelp(){
+        console.log("help");
+        document.getElementById("help_display").classList.toggle("hidden");
+    }
+    function updateCurrentCounter() {
+        let thumbnails = document.getElementsByClassName("thumbnail");
+        let loaded_media_count = thumbnails.length;
+        let pending_media_count = 0;
+        if (window.hasOwnProperty("media_queue")) {
+           pending_media_count = window.media_queue.length;
+        }
+        let total_count = loaded_media_count + pending_media_count;
+        let current_counter = Array.from(thumbnails).indexOf(window.selected_thumbnail);
+        let current_counter_el = document.getElementById("current_counter");
+        if (current_counter >= 0) {
+            current_counter_el.innerText = (current_counter + 1) + "/" + total_count;
+        } else {
+            current_counter_el.innerText = total_count;
+        }
+    };
+    function init() {
+       fetch("/api/list_directory?path=" + location.pathname + "&only_files=yes")
+           .then((r) => { return r.json(); })
+           .then((data) => {
+               window.non_media_list = data.filter(el => {
+                   return !(getExtension(el) in MEDIA_EXTENSIONS);
+               });
+               window.media_queue = data.filter(el => {
+                   return getExtension(el) in MEDIA_EXTENSIONS;
+               });
+               updateCurrentCounter();
+               initNonMedia();
+               loadMedia();
+           });
+    };
+    function initNonMedia() {
+       if (window.hasOwnProperty("non_media_list")) {
+           for (let name of window.non_media_list) {
+               appendNonMediaFile(name);
+           }
+       }
+    };
+    function appendNonMediaFile(name) {
+       li = document.createElement("li");
+       li.classList.add("dir");
+       link = document.createElement("a");
+       link.href = name;
+       link.innerText = name;
+       li.appendChild(link);
+       document.getElementById("non_media_list").appendChild(li);
+    };
+    function loadMedia() {
+       if (window.hasOwnProperty("media_queue")) {
+           let n = 8;
+           let queue_length = window.media_queue.length;
+           for (let i = 0; i < Math.min(n, queue_length); ++i) {
+               let name = window.media_queue.shift();
+               appendThumbnail(name);
+           }
+       }
+       /* while not enought elements loaded onscroll will not be called */
+       if(document.scrollingElement.scrollHeight <= document.scrollingElement.clientHeight) {
+           setTimeout(loadMedia, 10000);
+       }
+    };
+    function onImageError(event) {
+       event.srcElement.src= 
+           "data:image/svg+xml;charset=utf-8,"
+           + "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' width='100' height='100'>"
+           + "<rect width='100' height='100' fill='yellow' />"
+           + "<g transform='translate(7,7)'>"
+           + "<text x='0' y='0' font-size='8'>"
+           + "<tspan x='0' dy='1.2em'>Browser can't</tspan>"
+           + "<tspan x='0' dy='1.2em'>display raw image.</tspan>"
+           + "<tspan x='0' dy='1.2em'>Please install imread</tspan>"
+           + "<tspan x='0' dy='1.2em'>(<a href='https://github.com/luispedro/imread'>"
+           + "https://github.com/</a></tspan>"
+           + "<tspan x='0' dy='1.2em'><a href='https://github.com/luispedro/imread'>"
+           + "luispedro/imread</a>).</tspan>"
+           + "<tspan x='0' dy='1.2em'>$ pip install imread</tspan>"
+           + "</text></g></svg>";
+       event.srcElement.onerror = null;
+    };
+    function appendThumbnail(filename) {
+       let extension = getExtension(filename);
+       let media_type = MEDIA_EXTENSIONS[extension];
+       let link = document.createElement("a");
+       link.href = filename;
+       switch(media_type) {
+           case "IMAGE": {
+               let img = document.createElement("img");
+               img.classList.add("thumbnail_ui_el");
+               img.src = filename + "?act=thumbnail&frame_ind=0";
+               img.alt = "Browser can't display raw image. " 
+                         + "Please install imread (https://github.com/luispedro/imread).";
+               img.onerror = onImageError;
+               link.appendChild(img);
+               fetch("/api/count_frames?image_path=" + filename)
+                   .then(r => {return r.json(); })
+                   .then(data => {
+                      let frames_num = data;
+                      for (let i = 1; i < frames_num; ++i) {
+                          img = document.createElement("img");
+                          img.classList.add("thumbnail_ui_el");
+                          img.src = filename + "?act=thumbnail&frame_ind=" + i;
+                          img.alt = filename;
+                          link.appendChild(img);
+                      }
+                   });
+               break;
+           }
+           case "VIDEO": {
+               let video = document.createElement("video");
+               video.classList.add("thumbnail_ui_el");
+               video.innerText = "Your browser does not support the video tag.";
+               video.alt = filename;
+               video.controls = "true";
+               video.preload = "metadata";
+               let source = document.createElement("source");
+               source.src = filename;
+               source.media_type = "video/" + extension;
+               video.appendChild(source);
+               link.appendChild(video);
+               break;
+           }
+           case "AUDIO": {
+               let audio = document.createElement("audio");
+               audio.classList.add("thumbnail_ui_el");
+               audio.innerText = "Your browser does not support the audio tag.";
+               audio.alt = filename;
+               audio.controls = "true";
+               audio.preload = "metadata";
+               let source = document.createElement("source");
+               source.src = filename;
+               source.media_type = "audio/" + extension;
+               audio.appendChild(source);
+               link.appendChild(audio);
+               break;
+           }
+       }
+       let li = document.createElement("li");
+       li.classList.add("thumbnail");
+       li.appendChild(link);
+       let description_div = document.createElement("div");
+       description_div.classList.add("thumbnail_description");
+       description_div.innerText = filename;
+       li.appendChild(description_div);
+       document.getElementById("media_list").appendChild(li);
+    };
+    function loadMediaUncomment() {
+        let n = 8;
+        let l = document.getElementsByClassName("thumbnail");
+        let t = document.createElement("template");
+        Array.from(l)
+            .filter(el => el.firstChild.nodeType === 8)
+            .slice(0, n)
+            .forEach(el => { t.innerHTML = el.firstChild.data;
+                             el.firstChild.replaceWith(t.content);
+                            }
+                     );
+        /* while not enought elements loaded onscroll will not be called */
+        if(document.scrollingElement.scrollHeight <= document.scrollingElement.clientHeight) {
+            setTimeout(loadMedia, 10000);
+        }
+    };
+    function checkEndOfScroll() {
+        if ((window.innerHeight * 1.5 + window.scrollY) >= document.body.offsetHeight) {
+            loadMedia();
+        }
+    };
+    window.onscroll = function(ev) {
+       checkEndOfScroll();
+    };
+    window.onload = function() {
+        updateCurrentCounter();
+        init();
+    };
+    window.onkeydown = function(event) {
+        console.log(event);
+        switch(event.keyCode) {
+            case 39:
+                if (!event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+                    event.stopPropagation();
+                    previewNext();
+                    return false;
+                }
+                break;
+            case 37:
+                if (!event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+                    event.stopPropagation();
+                    previewPrevious();
+                    return false;
+                }
+                break;
+            case 83:
+                saveCurrent();
+                break;
+            case 72:
+            case 27:
+                toggleHelp();
+                break;
+            case 13:
+                let hovered = document.querySelectorAll(".thumbnail:hover").item(0);
+                if (hovered != null) {
+                    let link = hovered.getElementsByTagName("a").item(0);
+                    if (link != null) {
+                        link.focus();
+                    }
+                }
+                break;
+        }
+    };
+    function previewNext() {
+        if (typeof window.selected_thumbnail == "undefined") {
+            let thumbnails = document.getElementsByClassName("thumbnail");
+            if (thumbnails.length > 0) {
+                let first = thumbnails[0];
+                window.selected_thumbnail = first;
+                preview(first);
+            }
+        } else {
+            let current = window.selected_thumbnail;
+            preview(current.nextSibling);
+        }
+    };
+    function previewPrevious() {
+        if (typeof window.selected_thumbnail != "undefined") {
+            let current = window.selected_thumbnail;
+            preview(current.previousSibling);
+        }
+    };
+    window.onresize = function () {
+        if (typeof window.selected_thumbnail != "undefined") {
+            window.selected_thumbnail.scrollIntoView();
+        }
+    };
+    function preview(thumbnail) {
+        if (!thumbnail) {
+            return;
+        }
+        if (typeof window.selected_thumbnail != "undefined") {
+            window.selected_thumbnail.classList.remove("preview_thumbnail");
+        }
+        document.activeElement.blur();
+        thumbnail.classList.add("preview_thumbnail");
+        thumbnail.scrollIntoView();
+        thumbnail.getElementsByTagName("a")[0].focus();
+        window.selected_thumbnail = thumbnail;
+        updateCurrentCounter();
+        let thumbnail_ui_list = thumbnail.getElementsByClassName("thumbnail_ui_el");
+        if (thumbnail_ui_list.length > 0) {
+            thumbnail_ui_list[0].focus();
+        }
+       checkEndOfScroll();
+    };
+    function saveCurrent() {
+        if (typeof window.selected_thumbnail != "undefined") {
+            save(window.selected_thumbnail);
+        }
+    };
+    function save(thumbnail) {
+        let links = selected_thumbnail.getElementsByTagName("a");
+        for (let link of links) {
+            link = link.cloneNode();
+            link.onclick = null;
+            let filename = unescape(link.href.split("/").pop()
+                                    .split("?")[0].split("#")[0])
+                           .replace(/[\\/\\\\:*?"<>|]/g,"_");
+            link.setAttribute("download", filename);
+            link.click();
+        }
+    };
+    function handleMediaListClick(event) {
+        if (!event.ctrlKey) {
+            event.stopPropagation();
+            event.preventDefault();
+            let thumbnail = event.target.closest(".thumbnail");
+            if (thumbnail) {
+                if (thumbnail.classList.contains("preview_thumbnail")) {
+                    thumbnail.classList.remove("preview_thumbnail");
+                    thumbnail.scrollIntoView();
+                } else {
+                    preview(thumbnail);
+                }
+            }
+        }
+    };
+    '''
+
+
+HELP_ICON = '''\
+<a id="help_icon" title="display help" href="javascript:toggleHelp();">
+  <svg viewBox="0 0 22 22" height="2em" width="2em">
+    <circle cx="50%" cy="50%" r="9" stroke="#777" stroke-width="2" fill="transparent" />
+    <text x="50%" y="57%" font-size="16" dominant-baseline="middle" text-anchor="middle" fill="#777">?</text>
+    Sorry, your browser does not support inline SVG.
+  </svg>
+</a>
+'''
+
+HELP_DISPLAY = '''\
+<div id="help_display" class="hidden" onclick="toggleHelp()">
+  <div>
+   <h1>Usage</h1>
+   <div class="shortcut">
+       <span class="shortcut_descr">Next item</span>
+       <span class="shortcut_key" title="right arrow">→</span>
+   </div>
+   <div class="shortcut">
+       <span class="shortcut_descr">Previous item</span>
+       <span class="shortcut_key" title="left arrow">←</span>
+   </div>
+   <div class="shortcut">
+       <span class="shortcut_descr">Play/pause video</span>
+       <span class="shortcut_key">space</span>
+   </div>
+   <div class="shortcut">
+       <span class="shortcut_descr">Open original in new tab</span>
+       <span class="shortcut_key">Ctrl</span> + <span class="shortcut_key">click</span>
+   </div>
+   <div class="shortcut">
+       <span class="shortcut_descr">Preview multiple-frame image</span>
+       <span class="shortcut_key">Ctrl</span> + <span class="shortcut_key" title="right arrow">→</span>
+   </div>
+   <div class="shortcut">
+       <span class="shortcut_descr">Download current item</span>
+       <span class="shortcut_key">s</span>
+   </div>
+   <div class="shortcut">
+       <span class="shortcut_descr">Preview item under cursor</span>
+       <span class="shortcut_key">Enter</span>
+   </div>
+   <div class="shortcut">
+       <span class="shortcut_descr">Display/hide help message</span>
+       <span class="shortcut_key">Esc</span>
+   </div>
+   <div class="shortcut">
+       <span class="shortcut_descr">Display/hide help message</span>
+       <span class="shortcut_key">h</span>
+   </div>
+  </div>
+</div>
+'''
+
+GALLERY_HTML = '''\
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset={encoding}">
+        <title>{display_path}</title>
+        <style>{gallery_css}</style>
+        <script>{gallery_js_script}</script>
+    </head>
+    <body>
+        {help_icon}
+        {help_display}
+        <h1>Directory listing for {display_path}</h1>
+        <hr>
+            <div id="dirs">
+                <ul>
+                    {dirs_list}
+                </ul>
+            </div>
+        <hr>
+        <div id="non_media_list"></div>
+        <div onclick="handleMediaListClick(event)">
+            <ul id="media_list"></ul>
+        </div>
+        <p id="current_counter"></p>
+    </body>
+</html>
+'''
+
 
 def _is_media_file(path, media_type=None):
     if not os.path.isfile(path):
@@ -186,30 +674,138 @@ def _get_preview(path, min_height, frame_ind=0):
     return None
 
 
+def get_dirs_list_html(dirs_list):
+    r = list()
+    dirs_list.insert(0, "..")
+    for fullname in dirs_list:
+        name = os.path.basename(fullname)
+        display_name = link_name = name
+        # Append / for directories or @ for symbolic links
+        if os.path.isdir(fullname):
+            display_name = name + "/"
+            link_name = name + "/"
+        if os.path.islink(fullname):
+            display_name = name + "@"
+            # Note: a link to a directory displays with @ and links with /
+        r.append('<li class="dir"><a href="{href}">{text}</a></li>'.format(
+            href=urllib.parse.quote(link_name, errors='surrogatepass'),
+            text=html.escape(display_name, quote=False)))
+    return "\n".join(r)
+
+
+class MetaApi:
+    def __init__(self, root_path):
+        if os.path.isdir(root_path):
+            self.root_path = root_path
+        else:
+            self.root_path = os.curdir
+
+    @staticmethod
+    def call(method=None, **kwargs):
+        """
+        Calling api method by name.
+        @param method: method name (check help method)
+        @param kwargs: named arguments dictionary for method
+        @return: (result, HTTPStatus)
+        """
+        if type(method) is str \
+                and method != "call" \
+                and not method.startswith("_") \
+                and hasattr(MetaApi, method):
+            try:
+                return getattr(META_API, method)(**kwargs)
+            except TypeError:
+                doc, _ = MetaApi.help(method)
+                return doc, HTTPStatus.BAD_REQUEST
+        return MetaApi.help(**kwargs)
+
+    @staticmethod
+    def help(on=None):
+        """
+        Api help. Specify method for detailed help.
+        @param on: one of possible methods {methods}
+        """
+        def prepare_doc(doc=None):
+            if doc is None:
+                doc = "No documentation."
+            return doc.replace("\n        ", " ")
+        all_methods = [f for f in dir(MetaApi) if not f.startswith('_')]
+        if on not in all_methods:
+            return prepare_doc(MetaApi.help.__doc__.format(methods=all_methods)), HTTPStatus.OK
+        return prepare_doc(getattr(MetaApi, on).__doc__), HTTPStatus.OK
+
+    @staticmethod
+    def say_hi(**kwargs):
+        """
+        Test method, which just says 'hi' and prints arguments.
+        @param kwargs:
+        @return:
+        """
+        return "Hi! Arguments: {}".format(kwargs), HTTPStatus.OK
+
+    def list_directory(self, path=None, only_files=None):
+        """
+        Listing directory content.
+        @param path: path of directory to list
+        @param only_files: "yes" if only files wanted
+        @return: list of files and directories
+        """
+        if path is None:
+            path = self.root_path
+        else:
+            path = self._sanitize_path(path)
+            path = os.path.join(self.root_path, path)
+        only_files = only_files == 'yes'
+
+        result = None
+        status = HTTPStatus.NOT_FOUND
+        if os.path.isdir(path):
+            try:
+                dir_list = sorted(os.listdir(path))
+                if only_files:
+                    dir_list = [name for name in dir_list if os.path.isfile(os.path.join(path, name))]
+                result = dir_list
+                status = HTTPStatus.OK
+            except OSError:
+                pass
+        return result, status
+
+    def count_frames(self, image_path=None):
+        """
+        Count frames in multipage image file.
+        @param image_path:
+        @return: number of frames
+        """
+        if image_path is None:
+            return MetaApi.help('count_frames')
+        else:
+            image_path = self._sanitize_path(image_path)
+            image_path = os.path.join(self.root_path, image_path)
+
+        if _is_media_file(image_path, MediaTypes.IMAGE):
+            return _get_n_frames(image_path), HTTPStatus.OK
+        return "Not media file or not found.", HTTPStatus.BAD_REQUEST
+
+    @staticmethod
+    def _sanitize_path(path):
+        return os.path.normpath(path).replace(os.pardir, '').lstrip(os.sep)
+
+
+class Router:
+    pass
+    # TODO
+
+
 class RequestHandler(SimpleHTTPRequestHandler):
     def rest_api(self, method, api_args=None):
         enc = 'utf-8'
         result = None
         status = HTTPStatus.NOT_FOUND
-        if method == 'list_directory':
-            path = self.translate_path(api_args.get('dir', os.path.curdir))
-            only_files = 'only_files' in api_args and api_args['only_files'] == "yes"
-            if os.path.isdir(path):
-                try:
-                    dir_list = sorted(os.listdir(path))
-                    if only_files:
-                        dir_list = [name for name in dir_list if os.path.isfile(os.path.join(path, name))]
-                    result = io.BytesIO(json.dumps(dir_list).encode('utf-8'))
-                    status = HTTPStatus.OK
-                except OSError:
-                    pass
-        elif method == 'count_frames':
-            path = self.translate_path(api_args.get('image', os.path.curdir))
-            if _is_media_file(path, MediaTypes.IMAGE):
-                result = io.BytesIO(json.dumps(_get_n_frames(path)).encode('utf-8'))
-                status = HTTPStatus.OK
+        if META_API is not None:
+            result, status = META_API.call(method, **api_args)
+        result = io.BytesIO(json.dumps(result).encode('utf-8'))
         self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=%s" % enc)
+        self.send_header("Content-Type", "application/json; charset={charset}".format(charset=enc))
         self.end_headers()
         return result
 
@@ -230,9 +826,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
             return None
         directory_items.sort(key=lambda a: a.lower())
         dirs_list = [el for el in directory_items if os.path.isdir(el)]
-        # media_list = [el for el in directory_items if _is_media_file(el)]
-        # others_list = [el for el in directory_items if os.path.isfile(el) and el not in media_list]
-        r = []
+
         try:
             display_path = urllib.parse.unquote(self.path,
                                                 errors='surrogatepass')
@@ -240,496 +834,22 @@ class RequestHandler(SimpleHTTPRequestHandler):
             display_path = urllib.parse.unquote(path)
         display_path = html.escape(display_path, quote=False)
         enc = sys.getfilesystemencoding()
-        js_global_vars = 'var MEDIA_EXTENSIONS = ' + str({k: MEDIA_EXTENSIONS[k].name for k in MEDIA_EXTENSIONS}) + ';'
-        script = \
-            js_global_vars + \
-            'function getExtension(filename) {' \
-            '   let parts = filename.toLowerCase().split(".");' \
-            '   parts = parts.reverse();' \
-            '   return parts[0];' \
-            '};' \
-            'function toggleHelp(){' \
-            '    console.log("help");' \
-            '    document.getElementById("help_display").classList.toggle("hidden");' \
-            '}' \
-            'function updateCurrentCounter() {' \
-            '    let thumbnails = document.getElementsByClassName("thumbnail");' \
-            '    let loaded_media_count = thumbnails.length;' \
-            '    let pending_media_count = 0;' \
-            '    if (window.hasOwnProperty("media_queue")) {' \
-            '       pending_media_count = window.media_queue.length;' \
-            '    }' \
-            '    let total_count = loaded_media_count + pending_media_count;' \
-            '    let current_counter = Array.from(thumbnails).indexOf(window.selected_thumbnail);' \
-            '    let current_counter_el = document.getElementById("current_counter");' \
-            '    if (current_counter >= 0) {' \
-            '        current_counter_el.innerText = (current_counter + 1) + "/" + total_count;' \
-            '    } else {' \
-            '        current_counter_el.innerText = total_count;' \
-            '    }' \
-            '};' \
-            'function init() {' \
-            '   fetch("/api/list_directory/?dir=" + location.pathname + "&only_files=yes")' \
-            '       .then((r) => { return r.json(); })' \
-            '       .then((data) => {' \
-            '           window.non_media_list = data.filter(el => {' \
-            '               return !(getExtension(el) in MEDIA_EXTENSIONS);' \
-            '           });' \
-            '           window.media_queue = data.filter(el => {' \
-            '               return getExtension(el) in MEDIA_EXTENSIONS;' \
-            '           });' \
-            '           updateCurrentCounter();' \
-            '           initNonMedia();' \
-            '           loadMedia();' \
-            '       });' \
-            '};' \
-            'function initNonMedia() {' \
-            '   if (window.hasOwnProperty("non_media_list")) {' \
-            '       for (let name of window.non_media_list) {' \
-            '           appendNonMediaFile(name);' \
-            '       }' \
-            '   }' \
-            '};' \
-            'function appendNonMediaFile(name) {' \
-            '   li = document.createElement("li");' \
-            '   li.classList.add("dir");' \
-            '   link = document.createElement("a");' \
-            '   link.href = name;' \
-            '   link.innerText = name;' \
-            '   li.appendChild(link);' \
-            '   document.getElementById("non_media_list").appendChild(li);' \
-            '};' \
-            'function loadMedia() {' \
-            '   if (window.hasOwnProperty("media_queue")) {' \
-            '       let n = 8;' \
-            '       let queue_length = window.media_queue.length;' \
-            '       for (let i = 0; i < Math.min(n, queue_length); ++i) {' \
-            '           let name = window.media_queue.shift();' \
-            '           appendThumbnail(name);' \
-            '       }' \
-            '   }' \
-            '   /* while not enought elements loaded onscroll will not be called */' \
-            '   if(document.scrollingElement.scrollHeight <= document.scrollingElement.clientHeight) {' \
-            '       setTimeout(loadMedia, 10000);' \
-            '   }' \
-            '};' \
-            'function onImageError(event) {' \
-            '   event.srcElement.src= ' \
-            '       "data:image/svg+xml;charset=utf-8,"' \
-            '       + "<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\' width=\'100\' height=\'100\'>"' \
-            '       + "<rect width=\'100\' height=\'100\' fill=\'yellow\' />"' \
-            '       + "<g transform=\'translate(7,7)\'>"' \
-            '       + "<text x=\'0\' y=\'0\' font-size=\'8\'>"' \
-            '       + "<tspan x=\'0\' dy=\'1.2em\'>Browser can\'t</tspan>"' \
-            '       + "<tspan x=\'0\' dy=\'1.2em\'>display raw image.</tspan>"' \
-            '       + "<tspan x=\'0\' dy=\'1.2em\'>Please install imread</tspan>"' \
-            '       + "<tspan x=\'0\' dy=\'1.2em\'>(<a href=\'https://github.com/luispedro/imread\'>"' \
-            '       + "https://github.com/</a></tspan>"' \
-            '       + "<tspan x=\'0\' dy=\'1.2em\'><a href=\'https://github.com/luispedro/imread\'>"' \
-            '       + "luispedro/imread</a>).</tspan>"' \
-            '       + "<tspan x=\'0\' dy=\'1.2em\'>$ pip install imread</tspan>"' \
-            '       + "</text></g></svg>";' \
-            '   event.srcElement.onerror = null;' \
-            '};' \
-            'function appendThumbnail(filename) {' \
-            '   let extension = getExtension(filename);' \
-            '   let media_type = MEDIA_EXTENSIONS[extension];' \
-            '   let link = document.createElement("a");' \
-            '   link.href = filename;' \
-            '   switch(media_type) {' \
-            '       case "IMAGE": {' \
-            '           let img = document.createElement("img");' \
-            '           img.classList.add("thumbnail_ui_el");' \
-            '           img.src = filename + "?act=thumbnail&frame_ind=0";' \
-            '           img.alt = "Browser can\'t display raw image. " ' \
-            '                     + "Please install imread (https://github.com/luispedro/imread).";' \
-            '           img.onerror = onImageError;' \
-            '           link.appendChild(img);' \
-            '           fetch("/api/count_frames/?image=" + filename)' \
-            '               .then(r => {return r.json(); })' \
-            '               .then(data => {' \
-            '                  let frames_num = data;' \
-            '                  for (let i = 1; i < frames_num; ++i) {' \
-            '                      img = document.createElement("img");' \
-            '                      img.classList.add("thumbnail_ui_el");' \
-            '                      img.src = filename + "?act=thumbnail&frame_ind=" + i;' \
-            '                      img.alt = filename;' \
-            '                      link.appendChild(img);' \
-            '                  }' \
-            '               });' \
-            '           break;' \
-            '       }' \
-            '       case "VIDEO": {' \
-            '           let video = document.createElement("video");' \
-            '           video.classList.add("thumbnail_ui_el");' \
-            '           video.innerText = "Your browser does not support the video tag.";' \
-            '           video.alt = filename;' \
-            '           video.controls = "true";' \
-            '           video.preload = "metadata";' \
-            '           let source = document.createElement("source");' \
-            '           source.src = filename;' \
-            '           source.media_type = "video/" + extension;' \
-            '           video.appendChild(source);' \
-            '           link.appendChild(video);' \
-            '           break;' \
-            '       }' \
-            '       case "AUDIO": {' \
-            '           let audio = document.createElement("audio");' \
-            '           audio.classList.add("thumbnail_ui_el");' \
-            '           audio.innerText = "Your browser does not support the audio tag.";' \
-            '           audio.alt = filename;' \
-            '           audio.controls = "true";' \
-            '           audio.preload = "metadata";' \
-            '           let source = document.createElement("source");' \
-            '           source.src = filename;' \
-            '           source.media_type = "audio/" + extension;' \
-            '           audio.appendChild(source);' \
-            '           link.appendChild(audio);' \
-            '           break;' \
-            '       }' \
-            '   }' \
-            '   let li = document.createElement("li");' \
-            '   li.classList.add("thumbnail");' \
-            '   li.appendChild(link);' \
-            '   let description_div = document.createElement("div");' \
-            '   description_div.classList.add("thumbnail_description");' \
-            '   description_div.innerText = filename;' \
-            '   li.appendChild(description_div);' \
-            '   document.getElementById("media_list").appendChild(li);' \
-            '};' \
-            'function loadMediaUncomment() {' \
-            '    let n = 8;' \
-            '    let l = document.getElementsByClassName("thumbnail");' \
-            '    let t = document.createElement("template");' \
-            '    Array.from(l)' \
-            '        .filter(el => el.firstChild.nodeType === 8)' \
-            '        .slice(0, n)' \
-            '        .forEach(el => { t.innerHTML = el.firstChild.data;' \
-            '                         el.firstChild.replaceWith(t.content);' \
-            '                        }' \
-            '                 );' \
-            '    /* while not enought elements loaded onscroll will not be called */' \
-            '    if(document.scrollingElement.scrollHeight <= document.scrollingElement.clientHeight) {' \
-            '        setTimeout(loadMedia, 10000);' \
-            '    }' \
-            '};' \
-            'function checkEndOfScroll() {' \
-            '    if ((window.innerHeight * 1.5 + window.scrollY) >= document.body.offsetHeight) {' \
-            '        loadMedia();' \
-            '    }' \
-            '};' \
-            'window.onscroll = function(ev) {' \
-            '   checkEndOfScroll();' \
-            '};' \
-            'window.onload = function() {' \
-            '    updateCurrentCounter();' \
-            '    init();' \
-            '};' \
-            'window.onkeydown = function(event) {' \
-            '    console.log(event);' \
-            '    switch(event.keyCode) {' \
-            '        case 39:' \
-            '            if (!event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {' \
-            '                event.stopPropagation();' \
-            '                previewNext();' \
-            '                return false;' \
-            '            }' \
-            '            break;' \
-            '        case 37:' \
-            '            if (!event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {' \
-            '                event.stopPropagation();' \
-            '                previewPrevious();' \
-            '                return false;' \
-            '            }' \
-            '            break;' \
-            '        case 83:' \
-            '            saveCurrent();' \
-            '            break;' \
-            '        case 72:' \
-            '        case 27:' \
-            '            toggleHelp();' \
-            '            break;' \
-            '        case 13:' \
-            '            let hovered = document.querySelectorAll(".thumbnail:hover").item(0);' \
-            '            if (hovered != null) {' \
-            '                let link = hovered.getElementsByTagName("a").item(0);' \
-            '                if (link != null) {' \
-            '                    link.focus();' \
-            '                }' \
-            '            }' \
-            '            break;' \
-            '    }' \
-            '};' \
-            'function previewNext() {' \
-            '    if (typeof window.selected_thumbnail == "undefined") {' \
-            '        let thumbnails = document.getElementsByClassName("thumbnail");' \
-            '        if (thumbnails.length > 0) {' \
-            '            let first = thumbnails[0];' \
-            '            window.selected_thumbnail = first;' \
-            '            preview(first);' \
-            '        }' \
-            '    } else {' \
-            '        let current = window.selected_thumbnail;' \
-            '        preview(current.nextSibling);' \
-            '    }' \
-            '};' \
-            'function previewPrevious() {' \
-            '    if (typeof window.selected_thumbnail != "undefined") {' \
-            '        let current = window.selected_thumbnail;' \
-            '        preview(current.previousSibling);' \
-            '    }' \
-            '};' \
-            'window.onresize = function () {' \
-            '    if (typeof window.selected_thumbnail != "undefined") {' \
-            '        window.selected_thumbnail.scrollIntoView();' \
-            '    }' \
-            '};' \
-            'function preview(thumbnail) {' \
-            '    if (!thumbnail) {' \
-            '        return;' \
-            '    }' \
-            '    if (typeof window.selected_thumbnail != "undefined") {' \
-            '        window.selected_thumbnail.classList.remove("preview_thumbnail");' \
-            '    }' \
-            '    document.activeElement.blur();' \
-            '    thumbnail.classList.add("preview_thumbnail");' \
-            '    thumbnail.scrollIntoView();' \
-            '    thumbnail.getElementsByTagName("a")[0].focus();' \
-            '    window.selected_thumbnail = thumbnail;' \
-            '    updateCurrentCounter();' \
-            '    let thumbnail_ui_list = thumbnail.getElementsByClassName("thumbnail_ui_el");' \
-            '    if (thumbnail_ui_list.length > 0) {' \
-            '        thumbnail_ui_list[0].focus();' \
-            '    }' \
-            '   checkEndOfScroll();' \
-            '};' \
-            'function saveCurrent() {' \
-            '    if (typeof window.selected_thumbnail != "undefined") {' \
-            '        save(window.selected_thumbnail);' \
-            '    }' \
-            '};' \
-            'function save(thumbnail) {' \
-            '    let links = selected_thumbnail.getElementsByTagName("a");' \
-            '    for (let link of links) {' \
-            '        link = link.cloneNode();' \
-            '        link.onclick = null;' \
-            '        let filename = unescape(link.href.split("/").pop()' \
-            '                                .split("?")[0].split("#")[0])' \
-            '                       .replace(/[\\/\\\\:*?"<>|]/g,"_");' \
-            '        link.setAttribute("download", filename);' \
-            '        link.click();' \
-            '    }' \
-            '};' \
-            'function handleMediaListClick(event) {' \
-            '    if (!event.ctrlKey) {' \
-            '        event.stopPropagation();' \
-            '        event.preventDefault();' \
-            '        let thumbnail = event.target.closest(".thumbnail");' \
-            '        if (thumbnail) {' \
-            '            if (thumbnail.classList.contains("preview_thumbnail")) {' \
-            '                thumbnail.classList.remove("preview_thumbnail");' \
-            '                thumbnail.scrollIntoView();' \
-            '            } else {' \
-            '                preview(thumbnail);' \
-            '            }' \
-            '        }' \
-            '    }' \
-            '};'
 
-        css = \
-            '#help_icon {' \
-            '   position: fixed;' \
-            '   right: 1em;' \
-            '   top: 1em;' \
-            '}' \
-            '.hidden {' \
-            '   display: none;' \
-            '}' \
-            '#help_display {' \
-            '   position: fixed;' \
-            '   width: 100%;' \
-            '   height: 100%;' \
-            '   background: #9999;' \
-            '   top: 0px;' \
-            '   left: 0px;' \
-            '   z-index: 1;' \
-            '}' \
-            '#help_display > div {' \
-            '   display: table;' \
-            '   margin: 5em auto;' \
-            '   background: whitesmoke;' \
-            '   padding: 1em;' \
-            '   line-height: 2;' \
-            '}' \
-            '.shortcut {' \
-            '   display: flex;' \
-            '   align-items: flex-start;' \
-            '}' \
-            '.shortcut_descr {' \
-            '   padding-right: 30px;' \
-            '}' \
-            '.shortcut_key {' \
-            '   align-items: center;' \
-            '   justify-content: center;' \
-            '   height: 34px;' \
-            '   min-width: 34px;' \
-            '   box-sizing: border-box;' \
-            '   padding-left: 12px;' \
-            '   padding-right: 12px;' \
-            '   border: 1px solid #e0e3eb;' \
-            '   box-shadow: 0 2px 0 #e0e3eb;' \
-            '   border-radius: 6px;' \
-            '   color: #131722;' \
-            '   margin-left: auto;' \
-            '}' \
-            '.dir {' \
-            '   list-style-media_type: none;' \
-            '   display: inline-block;' \
-            '   margin: 15px;' \
-            '}' \
-            '#non_media_list {' \
-            '   padding-left: 40px;' \
-            '}' \
-            '#media_list {' \
-            '   text-align:center;' \
-            '}' \
-            '.thumbnail {' \
-            '   display: inline-block;' \
-            '   vertical-align: top;' \
-            '   background-color: ghostwhite;' \
-            '   border-radius: 0.5em;' \
-            '   margin: 1vh;' \
-            '}' \
-            '.thumbnail > a {' \
-            '   display: flex;' \
-            '   height: 300px;' \
-            '   margin: 4px;' \
-            '}' \
-            '.thumbnail:hover > a {' \
-            '   border: 4px dotted gray;' \
-            '   border-radius: 0.5em;' \
-            '   margin: 0em;' \
-            '}' \
-            '.thumbnail > .thumbnail_description {' \
-            '   font-size: 3vh;' \
-            '}' \
-            '.preview_thumbnail > .thumbnail_description {' \
-            '   font-size: 5vh;' \
-            '}' \
-            '.preview_thumbnail {' \
-            '   width: 94vw;' \
-            '}' \
-            '.preview_thumbnail > a {' \
-            '   height: 92vh;' \
-            '}' \
-            '.thumbnail_ui_el {' \
-            '   border-radius: 0.5em;' \
-            '   height: 100%;' \
-            '   max-width: 100%;' \
-            '   object-fit: contain;' \
-            '}' \
-            '#current_counter {' \
-            '   position: fixed;' \
-            '   bottom: 0px;' \
-            '   right: 0px;' \
-            '   background-color: white;' \
-            '   padding: 5px;' \
-            '}'
+        html_str = GALLERY_HTML.format(encoding=enc,
+                                       display_path=display_path,
+                                       gallery_css=GALLERY_CSS,
+                                       gallery_js_script=GALLERY_JS_SCRIPT,
+                                       help_icon=HELP_ICON,
+                                       help_display=HELP_DISPLAY,
+                                       dirs_list=get_dirs_list_html(dirs_list))
+        html_encoded = html_str.encode(enc, 'surrogateescape')
 
-        r.append('<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" '
-                 '"http://www.w3.org/TR/html4/strict.dtd">')
-        r.append('<html>\n<head>')
-        r.append('<meta http-equiv="Content-Type" '
-                 'content="text/html; charset=%s">' % enc)
-        r.append('<title>%s</title>' % display_path)
-        r.append('<style>%s</style>' % css)
-        r.append('<script>%s</script>' % script)
-        r.append('\n</head><body>\n')
-        help_icon = \
-            '<a id="help_icon" title="display help" href="javascript:toggleHelp();">' \
-            '  <svg viewBox="0 0 22 22" height="2em" width="2em">' \
-            '    <circle cx="50%" cy="50%" r="9" stroke="#777" stroke-width="2" fill="transparent" />' \
-            '    <text x="50%" y="57%" font-size="16" dominant-baseline="middle" text-anchor="middle" fill="#777">' \
-            '      ?</text>' \
-            '    Sorry, your browser does not support inline SVG.' \
-            '  </svg>' \
-            '</a>'
-        r.append(help_icon)
-        help_display = \
-            '<div id="help_display" class="hidden" onclick="toggleHelp()">' \
-            '  <div>' \
-            '   <h1>Usage</h1>' \
-            '   <div class="shortcut">' \
-            '       <span class="shortcut_descr">Next item</span>' \
-            '       <span class="shortcut_key" title="right arrow">→</span>' \
-            '   </div>' \
-            '   <div class="shortcut">' \
-            '       <span class="shortcut_descr">Previous item</span>' \
-            '       <span class="shortcut_key" title="left arrow">←</span>' \
-            '   </div>' \
-            '   <div class="shortcut">' \
-            '       <span class="shortcut_descr">Play/pause video</span>' \
-            '       <span class="shortcut_key">space</span>' \
-            '   </div>' \
-            '   <div class="shortcut">' \
-            '       <span class="shortcut_descr">Open original in new tab</span>' \
-            '       <span class="shortcut_key">Ctrl</span> + <span class="shortcut_key">click</span>' \
-            '   </div>' \
-            '   <div class="shortcut">' \
-            '       <span class="shortcut_descr">Preview multiple-frame image</span>' \
-            '       <span class="shortcut_key">Ctrl</span> + <span class="shortcut_key" title="right arrow">→</span>' \
-            '   </div>' \
-            '   <div class="shortcut">' \
-            '       <span class="shortcut_descr">Download current item</span>' \
-            '       <span class="shortcut_key">s</span>' \
-            '   </div>' \
-            '   <div class="shortcut">' \
-            '       <span class="shortcut_descr">Preview item under cursor</span>' \
-            '       <span class="shortcut_key">Enter</span>' \
-            '   </div>' \
-            '   <div class="shortcut">' \
-            '       <span class="shortcut_descr">Display/hide help message</span>' \
-            '       <span class="shortcut_key">Esc</span>' \
-            '   </div>' \
-            '   <div class="shortcut">' \
-            '       <span class="shortcut_descr">Display/hide help message</span>' \
-            '       <span class="shortcut_key">h</span>' \
-            '   </div>' \
-            '  </div>' \
-            '</div>'
-        r.append(help_display)
-        r.append('<h1>Directory listing for %s</h1>' % display_path)
-        r.append('<hr>\n<div id="dirs"><ul>')
-        dirs_list.insert(0, "..")
-        for fullname in dirs_list:
-            name = os.path.basename(fullname)
-            displayname = linkname = name
-            # Append / for directories or @ for symbolic links
-            if os.path.isdir(fullname):
-                displayname = name + "/"
-                linkname = name + "/"
-            if os.path.islink(fullname):
-                displayname = name + "@"
-                # Note: a link to a directory displays with @ and links with /
-            r.append('<li class="dir"><a href="%s">%s</a></li>'
-                     % (urllib.parse.quote(linkname,
-                                           errors='surrogatepass'),
-                        html.escape(displayname, quote=False)))
-        r.append('</ul></div>\n<hr>\n')
-
-        r.append('<div id="non_media_list"></div>\n')
-
-        r.append('<div onclick="handleMediaListClick(event)"><ul id="media_list"></ul></div>\n')
-
-        r.append('<p id="current_counter"></p>')
-        r.append('</body>\n</html>\n')
-        encoded = ''.join(r).encode(enc, 'surrogateescape')
         f = io.BytesIO()
-        f.write(encoded)
+        f.write(html_encoded)
         f.seek(0)
         self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", "text/html; charset=%s" % enc)
-        self.send_header("Content-Length", str(len(encoded)))
+        self.send_header("Content-Type", "text/html; charset={charset}".format(charset=enc))
+        self.send_header("Content-Length", str(len(html_encoded)))
         self.end_headers()
         return f
 
@@ -788,6 +908,9 @@ def run_server(port, dir_path):
 
     @return {None}
     """
+    global META_API
+    META_API = MetaApi(root_path=dir_path)
+
     if sys.version_info.major == 3 and sys.version_info.minor < 7:
         os.chdir(dir_path)
         request_handler = RequestHandler
@@ -804,7 +927,7 @@ def run_server(port, dir_path):
         request_handler
     )
 
-    print('Your images are at http://127.0.0.1:%d/' % port)
+    print('Your images are at http://127.0.0.1:{port}/'.format(port=port))
     print('In case you want access server from remote client check firewall rules.')
     # Try to run the server
     try:
