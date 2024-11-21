@@ -123,6 +123,21 @@ MEDIA_EXTENSIONS = {
 PREPROCESSED_MEDIA_TYPES = ['tiff', 'tif']
 
 GALLERY_CSS = '''
+    body {
+        margin: 0px;
+    }
+    #background_image {
+        position: fixed;
+        left: 0;
+        top: 0;
+        z-index: -1;
+        display: block;
+        width: 100vw;
+        height: 100vh;
+    }
+    #main_container {
+        padding: 8px;
+    }
     #help_icon {
        position: fixed;
        right: 1em;
@@ -182,13 +197,15 @@ GALLERY_CSS = '''
     .thumbnail {
        display: inline-block;
        vertical-align: top;
-       background-color: ghostwhite;
+       background-color: #f8f8ff61;
        border-radius: 0.5em;
        margin: 1vh;
     }
     .thumbnail > a {
        display: flex;
-       height: 300px;
+       height: 30vh;
+       align-items: center;
+       justify-content: center;
        margin: 4px;
     }
     .thumbnail:hover > a {
@@ -200,13 +217,14 @@ GALLERY_CSS = '''
        font-size: 3vh;
     }
     .preview_thumbnail > .thumbnail_description {
-       font-size: 5vh;
+       font-size: 3vh;
     }
     .preview_thumbnail {
-       width: 94vw;
+       width: fit-content;
+       height: 100vh;
     }
     .preview_thumbnail > a {
-       height: 92vh;
+        height: 95vh;
     }
     .thumbnail_ui_el {
        border-radius: 0.5em;
@@ -220,6 +238,12 @@ GALLERY_CSS = '''
        right: 0px;
        background-color: white;
        padding: 5px;
+    }
+    hr {
+        border: 0;
+        height: 1px;
+        background-image: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0));
+    }
     '''
 
 GALLERY_JS_GLOBAL_VARS = 'var MEDIA_EXTENSIONS = {};'\
@@ -320,6 +344,7 @@ GALLERY_JS_SCRIPT = \
        let extension = getExtension(filename);
        let media_type = MEDIA_EXTENSIONS[extension];
        let link = document.createElement("a");
+       link.className = "thumbnail_src"
        link.href = filename;
        switch(media_type) {
            case "IMAGE": {
@@ -437,7 +462,7 @@ GALLERY_JS_SCRIPT = \
             case 13:
                 let hovered = document.querySelectorAll(".thumbnail:hover").item(0);
                 if (hovered != null) {
-                    let link = hovered.getElementsByTagName("a").item(0);
+                    let link = hovered.querySelector("a.thumbnail_src");
                     if (link != null) {
                         link.focus();
                     }
@@ -469,6 +494,21 @@ GALLERY_JS_SCRIPT = \
             window.selected_thumbnail.scrollIntoView();
         }
     };
+    function get_content(thumbnail) {
+        return thumbnail.querySelector(".thumbnail_ui_el");
+    };
+    const canvas = document.getElementById('background_image');
+    const ctx = canvas.getContext('2d');
+    function update_background() {
+        if (typeof window.selected_thumbnail == "undefined") {
+            return;
+        }
+        thumbnail = window.selected_thumbnail
+        ctx.filter = "blur(8px)";
+        const content = get_content(thumbnail);
+        ctx.drawImage(content, 0, 0, canvas.width, canvas.height);
+        requestAnimationFrame(update_background);
+    }
     function preview(thumbnail) {
         if (!thumbnail) {
             return;
@@ -479,8 +519,9 @@ GALLERY_JS_SCRIPT = \
         document.activeElement.blur();
         thumbnail.classList.add("preview_thumbnail");
         thumbnail.scrollIntoView();
-        thumbnail.getElementsByTagName("a")[0].focus();
+        thumbnail.querySelector("a.thumbnail_src").focus();
         window.selected_thumbnail = thumbnail;
+        update_background();
         updateCurrentCounter();
         let thumbnail_ui_list = thumbnail.getElementsByClassName("thumbnail_ui_el");
         if (thumbnail_ui_list.length > 0) {
@@ -493,8 +534,11 @@ GALLERY_JS_SCRIPT = \
             save(window.selected_thumbnail);
         }
     };
+    function get_url(thumbnail) {
+        return thumbnail.querySelector("a.thumbnail_src").href;
+    };
     function save(thumbnail) {
-        let links = selected_thumbnail.getElementsByTagName("a");
+        let links = selected_thumbnail.querySelector("a.thumbnail_src");
         for (let link of links) {
             link = link.cloneNode();
             link.onclick = null;
@@ -582,26 +626,29 @@ GALLERY_HTML = '''\
 <html>
     <head>
         <meta http-equiv="Content-Type" content="text/html; charset={encoding}">
-        <title>{display_path}</title>
+        <title>.{display_path}</title>
         <style>{gallery_css}</style>
-        <script>{gallery_js_script}</script>
     </head>
     <body>
-        {help_icon}
-        {help_display}
-        <h1>Directory listing for {display_path}</h1>
-        <hr>
-            <div id="dirs">
-                <ul>
-                    {dirs_list}
-                </ul>
+        <canvas id="background_image"></canvas>
+        <div id="main_container">
+            {help_icon}
+            {help_display}
+            <h1>.{display_path}</h1>
+            <hr>
+                <div id="dirs">
+                    <ul>
+                        {dirs_list}
+                    </ul>
+                </div>
+            <hr>
+            <div id="non_media_list"></div>
+            <div onclick="handleMediaListClick(event)">
+                <ul id="media_list"></ul>
             </div>
-        <hr>
-        <div id="non_media_list"></div>
-        <div onclick="handleMediaListClick(event)">
-            <ul id="media_list"></ul>
+            <p id="current_counter"></p>
         </div>
-        <p id="current_counter"></p>
+        <script>{gallery_js_script}</script>
     </body>
 </html>
 '''
