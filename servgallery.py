@@ -506,6 +506,7 @@ GALLERY_JS_SCRIPT = \
         thumbnail = window.selected_thumbnail
         ctx.filter = "blur(8px)";
         const content = get_content(thumbnail);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(content, 0, 0, canvas.width, canvas.height);
         requestAnimationFrame(update_background);
     }
