@@ -126,14 +126,52 @@ GALLERY_CSS = '''
     body {
         margin: 0px;
     }
+    #bg_gradient {
+        position: fixed;
+        left: 0;
+        top: 0;
+        z-index: -2;
+        display: block;
+        width: 100%;
+        height: 100%;
+        
+        background: linear-gradient(358deg, #ff9b6d, #dfda00, #41a0f9);
+        background-size: 600% 600%;
+
+        -webkit-animation: AnimationName 29s ease infinite;
+        -moz-animation: AnimationName 29s ease infinite;
+        -o-animation: AnimationName 29s ease infinite;
+        animation: AnimationName 29s ease infinite;
+    }
+
+    @-webkit-keyframes AnimationName {
+        0%{background-position:51% 0%}
+        50%{background-position:50% 100%}
+        100%{background-position:51% 0%}
+    }
+    @-moz-keyframes AnimationName {
+        0%{background-position:51% 0%}
+        50%{background-position:50% 100%}
+        100%{background-position:51% 0%}
+    }
+    @-o-keyframes AnimationName {
+        0%{background-position:51% 0%}
+        50%{background-position:50% 100%}
+        100%{background-position:51% 0%}
+    }
+    @keyframes AnimationName {
+        0%{background-position:51% 0%}
+        50%{background-position:50% 100%}
+        100%{background-position:51% 0%}
+    }
     #background_image {
         position: fixed;
         left: 0;
         top: 0;
         z-index: -1;
         display: block;
-        width: 100vw;
-        height: 100vh;
+        width: 100%;
+        height: 100%;
     }
     #main_container {
         padding: 1vw;
@@ -210,12 +248,12 @@ GALLERY_CSS = '''
        height: 30vh;
        align-items: center;
        justify-content: center;
-       margin: 4px;
+       margin: 2px;
     }
     .thumbnail:hover > a {
-       border: 4px dotted gray;
+       border: 2px dotted gray;
        border-radius: 0.5em;
-       margin: 0em;
+       margin: 0px;
     }
     .thumbnail > .thumbnail_description {
        font-size: 3vh;
@@ -688,6 +726,7 @@ GALLERY_HTML = '''\
         <style>{gallery_css}</style>
     </head>
     <body>
+        <div id="bg_gradient"></div>
         <canvas id="background_image"></canvas>
         <div id="main_container">
             {help_icon}
