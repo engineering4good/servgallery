@@ -194,10 +194,13 @@ GALLERY_CSS = '''
     #media_list {
        text-align:center;
        padding: 0px;
+       display: flex;
+       flex-wrap: wrap;
+    }
+    li.thumbnail {
+       list-style-type: none;
     }
     .thumbnail {
-       display: inline-block;
-       vertical-align: top;
        background-color: #f8f8ff61;
        border-radius: 0.5em;
        margin: 1vw;
@@ -317,9 +320,19 @@ GALLERY_JS_SCRIPT = \
                appendThumbnail(name);
            }
        }
+       /* load until selected item */
+       let selected_file = document.location.hash.slice(1);
+       if (selected_file.length > 0) {
+           let selected_file_el = document.getElementById(selected_file)
+           if (selected_file_el == null) {
+               setTimeout(loadMedia, 1000);
+           } else {
+               preview(selected_file_el);
+           }
+       }
        /* while not enought elements loaded onscroll will not be called */
        if(document.scrollingElement.scrollHeight <= document.scrollingElement.clientHeight) {
-           setTimeout(loadMedia, 10000);
+           setTimeout(loadMedia, 1000);
        }
     };
     function onImageError(event) {
@@ -345,24 +358,24 @@ GALLERY_JS_SCRIPT = \
        let media_type = MEDIA_EXTENSIONS[extension];
        let link = document.createElement("a");
        link.className = "thumbnail_src"
-       link.href = filename;
+       link.href = encodeURIComponent(filename);
        switch(media_type) {
            case "IMAGE": {
                let img = document.createElement("img");
                img.classList.add("thumbnail_ui_el");
-               img.src = filename + "?act=thumbnail&frame_ind=0";
+               img.src = encodeURIComponent(filename) + "?act=thumbnail&frame_ind=0";
                img.alt = "Browser can't display raw image. " 
                          + "Please install imread (https://github.com/luispedro/imread).";
                img.onerror = onImageError;
                link.appendChild(img);
-               fetch("/api/count_frames?image_path=" + filename)
+               fetch("/api/count_frames?image_path=" + encodeURIComponent(filename))
                    .then(r => {return r.json(); })
                    .then(data => {
                       let frames_num = data;
                       for (let i = 1; i < frames_num; ++i) {
                           img = document.createElement("img");
                           img.classList.add("thumbnail_ui_el");
-                          img.src = filename + "?act=thumbnail&frame_ind=" + i;
+                          img.src = encodeURIComponent(filename) + "?act=thumbnail&frame_ind=" + i;
                           img.alt = filename;
                           link.appendChild(img);
                       }
@@ -377,7 +390,7 @@ GALLERY_JS_SCRIPT = \
                video.controls = "true";
                video.preload = "metadata";
                let source = document.createElement("source");
-               source.src = filename;
+               source.src = encodeURIComponent(filename);
                source.media_type = "video/" + extension;
                video.appendChild(source);
                link.appendChild(video);
@@ -391,7 +404,7 @@ GALLERY_JS_SCRIPT = \
                audio.controls = "true";
                audio.preload = "metadata";
                let source = document.createElement("source");
-               source.src = filename;
+               source.src = encodeURIComponent(filename);
                source.media_type = "audio/" + extension;
                audio.appendChild(source);
                link.appendChild(audio);
@@ -400,6 +413,7 @@ GALLERY_JS_SCRIPT = \
        }
        let li = document.createElement("li");
        li.classList.add("thumbnail");
+       li.id = encodeURIComponent(filename);
        li.appendChild(link);
        let description_div = document.createElement("div");
        description_div.classList.add("thumbnail_description");
@@ -539,15 +553,18 @@ GALLERY_JS_SCRIPT = \
         // Draw the image
         ctx.drawImage(content, x, y, drawWidth, drawHeight);
 
-        requestAnimationFrame(update_background);
+        if (content.tagName === "VIDEO") {
+            requestAnimationFrame(update_background);
+        }
     }
     function preview(thumbnail) {
-        if (!thumbnail) {
+        if (!thumbnail || thumbnail?.classList.contains("preview_thumbnail")) {
             return;
         }
         if (typeof window.selected_thumbnail != "undefined") {
             window.selected_thumbnail.classList.remove("preview_thumbnail");
         }
+        document.location.hash = thumbnail.id;
         document.activeElement.blur();
         thumbnail.classList.add("preview_thumbnail");
         thumbnail.scrollIntoView();
@@ -812,15 +829,6 @@ class MetaApi:
         if on not in all_methods:
             return prepare_doc(MetaApi.help.__doc__.format(methods=all_methods)), HTTPStatus.OK
         return prepare_doc(getattr(MetaApi, on).__doc__), HTTPStatus.OK
-
-    @staticmethod
-    def say_hi(**kwargs):
-        """
-        Test method, which just says 'hi' and prints arguments.
-        @param kwargs:
-        @return:
-        """
-        return "Hi! Arguments: {}".format(kwargs), HTTPStatus.OK
 
     def list_directory(self, path=None, only_files=None):
         """
