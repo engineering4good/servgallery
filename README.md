@@ -1,8 +1,10 @@
 # servGallery
 servGallery is a simple server for gallery preview on local network.
-It's like `python -m http.server`, but photo centered.
+It's like `python -m http.server`, but more visual.
 
-![screenshot](screenshot.png "servGallery screenshot")
+![screenshot](screenshots/screenshot1.png "directory preview")
+![screenshot](screenshots/screenshot2.png "single image preview")
+![screenshot](screenshots/screenshot3.png "usage window")
 ## Run server
 #### Example: share current directory
 ```bash
