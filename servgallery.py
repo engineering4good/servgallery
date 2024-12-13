@@ -136,7 +136,7 @@ GALLERY_CSS = '''
         height: 100vh;
     }
     #main_container {
-        padding: 8px;
+        padding: 1vw;
     }
     #help_icon {
        position: fixed;
@@ -193,13 +193,14 @@ GALLERY_CSS = '''
     }
     #media_list {
        text-align:center;
+       padding: 0px;
     }
     .thumbnail {
        display: inline-block;
        vertical-align: top;
        background-color: #f8f8ff61;
        border-radius: 0.5em;
-       margin: 1vh;
+       margin: 1vw;
     }
     .thumbnail > a {
        display: flex;
@@ -220,7 +221,7 @@ GALLERY_CSS = '''
        font-size: 3vh;
     }
     .preview_thumbnail {
-       width: fit-content;
+       width: 96vw;
        height: 100vh;
     }
     .preview_thumbnail > a {
@@ -228,9 +229,8 @@ GALLERY_CSS = '''
     }
     .thumbnail_ui_el {
        border-radius: 0.5em;
-       height: 100%;
+       max-height: 100%;
        max-width: 100%;
-       object-fit: contain;
     }
     #current_counter {
        position: fixed;
@@ -489,11 +489,12 @@ GALLERY_JS_SCRIPT = \
             preview(current.previousSibling);
         }
     };
-    window.onresize = function () {
+    screen.orientation.addEventListener("change", (event) => {
+        console.log(window.selected_thumbnail)
         if (typeof window.selected_thumbnail != "undefined") {
             window.selected_thumbnail.scrollIntoView();
         }
-    };
+    });
     function get_content(thumbnail) {
         return thumbnail.querySelector(".thumbnail_ui_el");
     };
@@ -503,11 +504,41 @@ GALLERY_JS_SCRIPT = \
         if (typeof window.selected_thumbnail == "undefined") {
             return;
         }
+        const subsampling = 10;
+        canvas.width = canvas.clientWidth / subsampling;
+        canvas.height = canvas.clientHeight / subsampling;
+
         thumbnail = window.selected_thumbnail
-        ctx.filter = "blur(8px)";
+        ctx.filter = "blur(3px)";
         const content = get_content(thumbnail);
+
+        const canvasAspectRatio = canvas.width / canvas.height;
+        const contentWidth = content.width ? content.width : content.clientWidth;
+        const contentHeight = content.height ? content.height : content.clientHeight;
+        const imageAspectRatio = contentWidth / contentHeight;
+
+        let drawWidth, drawHeight;
+
+        // Determine if we should fit by width or height
+        if (canvasAspectRatio < imageAspectRatio) {
+            // Fit by height
+            drawHeight = canvas.height;
+            drawWidth = drawHeight * imageAspectRatio;
+        } else {
+            // Fit by width
+            drawWidth = canvas.width;
+            drawHeight = drawWidth / imageAspectRatio;
+        }
+
+        // Calculate the position to center the image
+        const x = (canvas.width - drawWidth) / 2;
+        const y = (canvas.height - drawHeight) / 2;
+
+        // Clear the canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(content, 0, 0, canvas.width, canvas.height);
+        // Draw the image
+        ctx.drawImage(content, x, y, drawWidth, drawHeight);
+
         requestAnimationFrame(update_background);
     }
     function preview(thumbnail) {
